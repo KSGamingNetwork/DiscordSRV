@@ -52,7 +52,7 @@ import java.lang.reflect.Method;
 
 public class ModernPlayerChatListener implements Listener {
 
-    @EventHandler(priority = EventPriority.MONITOR)
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     public void onAsyncChat(AsyncChatEvent event) {
         if (!DiscordSRV.config().getBooleanElse("UseModernPaperChatEvent", false)) return;
 

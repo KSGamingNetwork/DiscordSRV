@@ -32,7 +32,7 @@ import org.bukkit.event.player.AsyncPlayerChatEvent;
 public class PlayerChatListener implements Listener {
 
     @SuppressWarnings("deprecation") // legacy
-    @EventHandler(priority = EventPriority.MONITOR)
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     public void onAsyncPlayerChat(AsyncPlayerChatEvent event) {
         if (DiscordSRV.config().getBooleanElse("UseModernPaperChatEvent", false)
                 && DiscordSRV.getPlugin().isModernChatEventAvailable()) {

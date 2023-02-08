@@ -28,6 +28,7 @@ import github.scarsz.discordsrv.DiscordSRV;
 import github.scarsz.discordsrv.api.commands.*;
 import github.scarsz.discordsrv.api.events.Event;
 import github.scarsz.discordsrv.api.events.GuildSlashCommandUpdateEvent;
+import github.scarsz.discordsrv.d_commands.CommandPlayerList;
 import github.scarsz.discordsrv.util.LangUtil;
 import lombok.NonNull;
 import net.dv8tion.jda.api.entities.Guild;
@@ -76,6 +77,8 @@ public class ApiManager extends ListenerAdapter {
     private final List<Object> apiListeners = new CopyOnWriteArrayList<>();
     private final Set<SlashCommandProvider> slashCommandProviders = new CopyOnWriteArraySet<>();
     private final Set<PluginSlashCommand> runningCommandData = new HashSet<>();
+    private final CommandPlayerList internal_commands = new CommandPlayerList();
+
     private boolean anyHooked = false;
 
     private final EnumSet<GatewayIntent> intents = EnumSet.of(
@@ -164,6 +167,7 @@ public class ApiManager extends ListenerAdapter {
                 commands.addAll(provider.getSlashCommands());
             }
         }
+        slashCommandProviders.add(internal_commands);
         slashCommandProviders.forEach(p -> commands.addAll(p.getSlashCommands()));
 
         int conflictingCommands = 0;
@@ -209,8 +213,10 @@ public class ApiManager extends ListenerAdapter {
             long pluginCount = conflictResolvedCommands.values().stream().map(PluginSlashCommand::getPlugin).distinct().count();
             long registeredGuilds = all.stream().filter(Objects::nonNull).count();
             int totalGuilds = DiscordSRV.getPlugin().getJda().getGuilds().size();
-            if (finalConflictingCommands > 0) {
+            if (successful > 0) {
                 DiscordSRV.info("Successfully registered " + successful + " slash commands (" + finalConflictingCommands + " conflicted) for " + pluginCount + " plugins in " + registeredGuilds + "/" + totalGuilds + " guilds (" + finalCancelledGuilds + " cancelled)");
+            } else {
+                DiscordSRV.info("Cleared all pre-existing slash commands in " + registeredGuilds + "/" + totalGuilds + " guilds (" + finalCancelledGuilds + " cancelled)");
             }
 
             if (errors.isEmpty()) return;

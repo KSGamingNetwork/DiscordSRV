@@ -26,6 +26,7 @@ import com.vdurmont.emoji.EmojiParser;
 import github.scarsz.discordsrv.Debug;
 import github.scarsz.discordsrv.DiscordSRV;
 import github.scarsz.discordsrv.api.events.*;
+import github.scarsz.discordsrv.d_commands.CommandPlayerList;
 import github.scarsz.discordsrv.hooks.DynmapHook;
 import github.scarsz.discordsrv.hooks.VaultHook;
 import github.scarsz.discordsrv.hooks.world.MultiverseCoreHook;
@@ -95,7 +96,7 @@ public class DiscordChatListener extends ListenerAdapter {
         // sanity & intention checks
         String message = event.getMessage().getContentRaw();
         if (StringUtils.isBlank(message) && event.getMessage().getAttachments().isEmpty() && event.getMessage().getStickers().isEmpty()) return;
-        if (processPlayerListCommand(event, message)) return;
+        if (CommandPlayerList.process(event, message)) return;
         if (processConsoleCommand(event, event.getMessage().getContentRaw())) return;
 
         // return if should not send discord chat
@@ -332,6 +333,11 @@ public class DiscordChatListener extends ListenerAdapter {
 
         placedMessage = MessageUtil.translateLegacy(
                 replacePlaceholders(placedMessage, event, selectedRoles));
+        OfflinePlayer authorPlayer = null;
+        UUID authorLinkedUuid = DiscordSRV.getPlugin().getAccountLinkManager().getUuid(event.getAuthor().getId());
+        if (authorLinkedUuid != null) authorPlayer = Bukkit.getOfflinePlayer(authorLinkedUuid);
+
+        placedMessage = PlaceholderUtil.replacePlaceholders(placedMessage, authorPlayer);
         placedMessage = DiscordUtil.convertMentionsToNames(placedMessage);
         if (!MessageUtil.isLegacy(placedMessage)) {
             // A hack that'll hold over until rewrite
@@ -401,69 +407,6 @@ public class DiscordChatListener extends ListenerAdapter {
         return format.replace("%name%", escape.apply(MessageUtil.strip(repliedUserName)))
                 .replace("%username%", escape.apply(MessageUtil.strip(repliedMessage.getAuthor().getName())))
                 .replace("%message%", escape.apply(MessageUtil.strip(repliedMessage.getContentDisplay())));
-    }
-
-    private boolean processPlayerListCommand(GuildMessageReceivedEvent event, String message) {
-        if (!DiscordSRV.config().getBoolean("DiscordChatChannelListCommandEnabled")) return false;
-        if (!StringUtils.trimToEmpty(message).equalsIgnoreCase(DiscordSRV.config().getString("DiscordChatChannelListCommandMessage"))) return false;
-
-        int expiration = DiscordSRV.config().getInt("DiscordChatChannelListCommandExpiration") * 1000;
-        String playerListMessage;
-        if (PlayerUtil.getOnlinePlayers(true).size() == 0) {
-            playerListMessage = PlaceholderUtil.replacePlaceholdersToDiscord(LangUtil.Message.PLAYER_LIST_COMMAND_NO_PLAYERS.toString());
-        } else {
-            playerListMessage = LangUtil.Message.PLAYER_LIST_COMMAND.toString().replace("%playercount%", PlayerUtil.getOnlinePlayers(true).size() + "/" + Bukkit.getMaxPlayers());
-            playerListMessage = PlaceholderUtil.replacePlaceholdersToDiscord(playerListMessage);
-            playerListMessage += "\n```\n";
-
-            StringJoiner players = new StringJoiner(LangUtil.Message.PLAYER_LIST_COMMAND_ALL_PLAYERS_SEPARATOR.toString());
-
-            List<String> playerList = new LinkedList<>();
-            for (Player player : PlayerUtil.getOnlinePlayers(true)) {
-                String userPrimaryGroup = VaultHook.getPrimaryGroup(player);
-                boolean hasGoodGroup = StringUtils.isNotBlank(userPrimaryGroup);
-                // capitalize the first letter of the user's primary group to look neater
-                if (hasGoodGroup) userPrimaryGroup = userPrimaryGroup.substring(0, 1).toUpperCase() + userPrimaryGroup.substring(1);
-
-                String playerFormat = LangUtil.Message.PLAYER_LIST_COMMAND_PLAYER.toString()
-                        .replace("%username%", player.getName())
-                        .replace("%displayname%", MessageUtil.strip(player.getDisplayName()))
-                        .replace("%primarygroup%", userPrimaryGroup)
-                        .replace("%world%", player.getWorld().getName())
-                        .replace("%worldalias%", MessageUtil.strip(MultiverseCoreHook.getWorldAlias(player.getWorld().getName())));
-
-                // use PlaceholderAPI if available
-                playerFormat = PlaceholderUtil.replacePlaceholdersToDiscord(playerFormat, player);
-                playerList.add(playerFormat);
-            }
-
-            playerList.sort(Comparator.naturalOrder());
-            for (String playerFormat : playerList) {
-                players.add(playerFormat);
-            }
-            playerListMessage += players.toString();
-
-            if (playerListMessage.length() > 1996) playerListMessage = playerListMessage.substring(0, 1993) + "...";
-            playerListMessage += "\n```";
-        }
-
-        DiscordChatChannelListCommandMessageEvent listCommandMessageEvent = DiscordSRV.api.callEvent(
-                new DiscordChatChannelListCommandMessageEvent(event.getChannel(), event.getGuild(), message, event, playerListMessage, expiration, DiscordChatChannelListCommandMessageEvent.Result.SEND_RESPONSE));
-        switch (listCommandMessageEvent.getResult()) {
-            case SEND_RESPONSE:
-                DiscordUtil.sendMessage(event.getChannel(), listCommandMessageEvent.getPlayerListMessage(), listCommandMessageEvent.getExpiration());
-
-                // expire message after specified time
-                if (listCommandMessageEvent.getExpiration() > 0 && DiscordSRV.config().getBoolean("DiscordChatChannelListCommandExpirationDeleteRequest")) {
-                    event.getMessage().delete().queueAfter(listCommandMessageEvent.getExpiration(), TimeUnit.MILLISECONDS);
-                }
-                return true;
-            case NO_ACTION:
-                return true;
-            case TREAT_AS_REGULAR_MESSAGE:
-                return false;
-        }
-        return true;
     }
 
     private boolean processConsoleCommand(GuildMessageReceivedEvent event, String message) {
